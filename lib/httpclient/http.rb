@@ -414,7 +414,9 @@ module HTTP
       # Initialize this instance as a response.
       def init_response(body = nil)
         @body = body
-        if @body.respond_to?(:size)
+        if @body.respond_to?(:bytesize)
+          @size = @body.bytesize
+        elsif @body.respond_to?(:size)
           @size = @body.size
         else
           @size = nil
@@ -496,7 +498,7 @@ module HTTP
           @size = @body.size
         else
           @body = Message.create_query_part_str(body)
-          @size = @body.size
+          @size = @body.bytesize
         end
       end
 
@@ -517,7 +519,7 @@ module HTTP
       end
 
       def dump_chunk(str)
-        dump_chunk_size(str.size) + (str + CRLF)
+        dump_chunk_size(str.bytesize) + (str + CRLF)
       end
 
       def dump_last_chunk
@@ -555,10 +557,10 @@ module HTTP
             end
           elsif @body[-1].is_a?(String)
             @body[-1] += part.to_s
-            @size += part.to_s.size if @size
+            @size += part.to_s.bytesize if @size
           else
             @body << part.to_s
-            @size += part.to_s.size if @size
+            @size += part.to_s.bytesize if @size
           end
         end
 
@@ -584,7 +586,8 @@ module HTTP
             if value.respond_to?(:mime_type)
               content_type = value.mime_type
             else
-              content_type = Message.mime_type(value.path)
+              path = value.respond_to?(:path) ? value.path : nil
+              content_type = Message.mime_type(path)
             end
             headers << %{Content-Disposition: form-data; name="#{attr}"; #{param_str}}
             headers << %{Content-Type: #{content_type}}
@@ -601,7 +604,8 @@ module HTTP
 
       def params_from_file(value)
         params = {}
-        params['filename'] = File.basename(value.path || '')
+        path = value.respond_to?(:path) ? value.path : nil
+        params['filename'] = File.basename(path || '')
         # Creation time is not available from File::Stat
         if value.respond_to?(:mtime)
           params['modification-date'] = value.mtime.rfc822
@@ -736,15 +740,14 @@ module HTTP
 
       # Returns true if the given object is a File.  In HTTPClient, a file is;
       # * must respond to :read for retrieving String chunks.
-      # * must respond to :path and returns a path for Content-Disposition.
       # * must respond to :pos and :pos= to rewind for reading.
       #   Rewinding is only needed for following HTTP redirect.  Some IO impl
       #   defines :pos= but raises an Exception for pos= such as StringIO
       #   but there's no problem as far as using it for non-following methods
       #   (get/post/etc.)
       def file?(obj)
-        obj.respond_to?(:read) and obj.respond_to?(:path) and
-          obj.respond_to?(:pos) and obj.respond_to?(:pos=)
+        obj.respond_to?(:read) and obj.respond_to?(:pos) and
+          obj.respond_to?(:pos=)
       end
 
       def create_query_part_str(query) # :nodoc:
@@ -758,7 +761,7 @@ module HTTP
       end
 
       def escape_query(query) # :nodoc:
-        query.collect { |attr, value|
+        query.sort_by { |attr, value| attr.to_s }.collect { |attr, value|
           if value.respond_to?(:read)
             value = value.read
           end
@@ -768,9 +771,15 @@ module HTTP
 
       # from CGI.escape
       def escape(str) # :nodoc:
-        str.gsub(/([^ a-zA-Z0-9_.-]+)/n) {
-          '%' + $1.unpack('H2' * $1.size).join('%').upcase
-        }.tr(' ', '+')
+        if str.respond_to?(:force_encoding)
+          str.dup.force_encoding('BINARY').gsub(/([^ a-zA-Z0-9_.-]+)/) {
+            '%' + $1.unpack('H2' * $1.bytesize).join('%').upcase
+          }.tr(' ', '+')
+        else
+          str.gsub(/([^ a-zA-Z0-9_.-]+)/n) {
+            '%' + $1.unpack('H2' * $1.bytesize).join('%').upcase
+          }.tr(' ', '+')
+        end
       end
     end
 

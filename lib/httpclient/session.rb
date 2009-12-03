@@ -806,8 +806,8 @@ class HTTPClient
             buf = nil
           end
         end
-        if buf && buf.length > 0
-          @content_length -= buf.length
+        if buf && buf.bytesize > 0
+          @content_length -= buf.bytesize
           yield buf
         else
           @content_length = 0
@@ -837,7 +837,7 @@ class HTTPClient
     end
 
     def read_body_rest
-      if @readbuf and @readbuf.length > 0
+      if @readbuf and @readbuf.bytesize > 0
         yield @readbuf
         @readbuf = nil
       end
@@ -850,7 +850,7 @@ class HTTPClient
             buf = nil
           end
         end
-        if buf && buf.length > 0
+        if buf && buf.bytesize > 0
           yield buf
         else
           return

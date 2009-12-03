@@ -1,3 +1,4 @@
+# -*- encoding: UTF-8 -*-
 require 'test/unit'
 require 'httpclient'
 require 'webrick'
@@ -1016,7 +1017,7 @@ EOS
 
   def test_timeout_scheduler
     assert_equal('hello', @client.get_content(@url + 'hello'))
-    status =  HTTPClient.timeout_scheduler.instance_eval { @thread.kill; @thread.status }
+    status =  HTTPClient.timeout_scheduler.instance_eval { @thread.kill; @thread.join; @thread.status }
     assert(!status) # dead
     assert_equal('hello', @client.get_content(@url + 'hello'))
   end
@@ -1191,8 +1192,10 @@ private
     end
 
     def do_PUT(req, res)
-      res.body = 'put'
       res["x-query"] = body_response(req)
+      param = WEBrick::HTTPUtils.parse_query(req.body) || {}
+      res["x-size"] = (param['txt'] || '').size
+      res.body = param['txt'] || 'put'
     end
 
     def do_DELETE(req, res)
